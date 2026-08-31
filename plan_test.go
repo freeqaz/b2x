@@ -114,3 +114,58 @@ func Example_planParts() {
 	// 529.3MiB -> 66 parts of 8.0MiB
 	// 20.5GiB -> 128 parts of 163.9MiB
 }
+
+func TestWorkersForNarrowsBudgetToWhatObjectsAbsorb(t *testing.T) {
+	// The measured defect: a single-object pull handed the whole budget ran
+	// ~128 concurrent range-GETs against one key and lost ~3x throughput.
+	if got := workersFor(192, 1); got != maxInFlightPerObject {
+		t.Errorf("workersFor(192, 1) = %d, want %d", got, maxInFlightPerObject)
+	}
+	if got := workersFor(192, 4); got != 4*maxInFlightPerObject {
+		t.Errorf("workersFor(192, 4) = %d, want %d", got, 4*maxInFlightPerObject)
+	}
+	// Many objects: the global budget binds again, so a wide model directory
+	// keeps its parallelism.
+	if got := workersFor(192, 32); got != 192 {
+		t.Errorf("workersFor(192, 32) = %d, want 192 (budget binds)", got)
+	}
+	// A budget already below the ceiling is never raised.
+	if got := workersFor(8, 4); got != 8 {
+		t.Errorf("workersFor(8, 4) = %d, want 8", got)
+	}
+	if got := workersFor(16, 0); got != 16 {
+		t.Errorf("workersFor(16, 0) = %d, want 16 (degenerate object count)", got)
+	}
+}
+
+func TestInterleaveByObjectSpreadsConsecutiveJobs(t *testing.T) {
+	// Queue grouped by object: a,a,a,b,b,b — the shape the pull planner emits.
+	keys := []string{"a", "a", "a", "b", "b", "b"}
+	got := interleaveByObject(len(keys), func(i int) string { return keys[i] })
+	if len(got) != len(keys) {
+		t.Fatalf("interleave returned %d indices, want %d", len(got), len(keys))
+	}
+	// Every job appears exactly once.
+	seen := map[int]bool{}
+	for _, i := range got {
+		if seen[i] {
+			t.Fatalf("index %d emitted twice", i)
+		}
+		seen[i] = true
+	}
+	// Adjacent jobs alternate objects — the property the per-object ceiling
+	// relies on to hold in practice.
+	want := []int{0, 3, 1, 4, 2, 5}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("interleave = %v, want %v", got, want)
+		}
+	}
+	// Parts of one object keep their order, so resume still writes forward.
+	if got := interleaveByObject(3, func(i int) string { return "solo" }); got[0] != 0 || got[2] != 2 {
+		t.Errorf("single-object interleave reordered parts: %v", got)
+	}
+	if interleaveByObject(0, func(int) string { return "" }) != nil {
+		t.Error("empty queue should interleave to nil")
+	}
+}

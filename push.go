@@ -284,7 +284,9 @@ func uploadOne(ctx context.Context, c *s3Client, it pushItem, key string, st *st
 		return err
 	}
 	parts := make([]completePart, p.NParts)
-	err = runParts(ctx, st.concurrency, p.NParts, func(i int) error {
+	// One object at a time here, so the per-object ceiling IS the pool size
+	// (plan.go: maxInFlightPerObject).
+	err = runParts(ctx, workersFor(st.concurrency, 1), p.NParts, func(i int) error {
 		off, n := p.partRange(i)
 		buf := make([]byte, n)
 		// A short ReadAt means the file SHRANK below the walk-time size. The

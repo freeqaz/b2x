@@ -222,8 +222,13 @@ func runPull(ctx context.Context, c *s3Client, cfg *config, srcKey, dstPath stri
 	done := make(map[string]bool) // rel -> whole file complete
 	var doneMu sync.Mutex
 
-	err := runParts(ctx, st.concurrency, len(jobs), func(i int) error {
-		j := jobs[i]
+	// Spread the queue across objects, then size the pool to what those objects
+	// can absorb (plan.go: maxInFlightPerObject) — piling the full budget onto
+	// one key costs ~3x throughput.
+	order := interleaveByObject(len(jobs), func(i int) string { return jobs[i].rel })
+	nObjs := int(st.objs.Load())
+	err := runParts(ctx, workersFor(st.concurrency, nObjs), len(jobs), func(i int) error {
+		j := jobs[order[i]]
 		f := files[j.dst]
 		if f == nil {
 			return fmt.Errorf("internal: no open file for %s", j.rel)

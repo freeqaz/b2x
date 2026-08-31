@@ -58,6 +58,25 @@ const (
 	// S3 hard limit: an MPU may have at most 10000 parts. maxPartsPerObject is
 	// far below this, but partSizeFor asserts it for very large objects.
 	s3MaxParts = 10000
+
+	// maxInFlightPerObject caps concurrent range requests against a SINGLE key.
+	// This is a different axis from maxPartsPerObject (how finely the object is
+	// split) and from the global budget (how much work is in flight overall) —
+	// an object stays split into many small parts for cheap resume, but only
+	// this many of them are ever in the air at once.
+	//
+	// It exists because B2 degrades sharply when one key is read by too many
+	// connections. Measured on an 80-core / 8.6 Gbps host against a 4 GB object,
+	// varying ONLY the in-flight count (part count fixed at 128):
+	//
+	//     8 -> 266 MB/s   16 -> 540   24 -> 740   32 -> 631
+	//    48 -> 464        64 -> 265   96 -> 277  128 -> 234   192 -> 224
+	//
+	// The knee is narrow and the far side is a cliff, so the cap sits at 32:
+	// inside the measured plateau, ecosystem-conventional, and nowhere near the
+	// collapse. The peak (24) is one host's optimum and tuning to it would be
+	// overfitting — B2X_CONCURRENCY remains available per call site.
+	maxInFlightPerObject = 32
 )
 
 // partPlan describes how one object is split.
@@ -120,6 +139,59 @@ func (p partPlan) partRange(i int) (off, n int64) {
 		n = p.Size - off
 	}
 	return off, n
+}
+
+// workersFor is the global in-flight budget narrowed to what the object set can
+// actually absorb: nObjects * maxInFlightPerObject. Fewer objects means a lower
+// ceiling, which is the whole point — a single-object pull must not be handed
+// the budget sized for a whole model directory.
+//
+// This is an average, not a per-key guarantee: it holds because the queue is
+// interleaved (interleaveByObject), so any window of consecutive jobs spreads
+// across objects rather than draining one key at a time.
+func workersFor(budget, nObjects int) int {
+	if nObjects < 1 {
+		nObjects = 1
+	}
+	if cap := nObjects * maxInFlightPerObject; budget > cap {
+		return cap
+	}
+	return budget
+}
+
+// interleaveByObject reorders a queue that is grouped by object (obj1 parts,
+// then obj2 parts, …) into round-robin order (obj1p1, obj2p1, …, obj1p2, …).
+//
+// Grouped order defeats the per-object ceiling: workers take jobs in order, so
+// the first maxPartsPerObject of them all land on object 1 no matter how many
+// objects the transfer has. Round-robin makes concurrency spread by
+// construction. key(i) returns the object identity of job i; jobs of one object
+// keep their relative order, so part 0 is still issued before part 1.
+func interleaveByObject(n int, key func(i int) string) []int {
+	if n <= 1 {
+		if n == 1 {
+			return []int{0}
+		}
+		return nil
+	}
+	groups := map[string][]int{}
+	order := []string{}
+	for i := 0; i < n; i++ {
+		k := key(i)
+		if _, seen := groups[k]; !seen {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], i)
+	}
+	out := make([]int, 0, n)
+	for round := 0; len(out) < n; round++ {
+		for _, k := range order {
+			if g := groups[k]; round < len(g) {
+				out = append(out, g[round])
+			}
+		}
+	}
+	return out
 }
 
 func ceilDiv(a, b int64) int64 {
