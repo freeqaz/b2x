@@ -86,6 +86,8 @@ Concurrency is COMPUTED from object size and CPU count — there is no
 Environment: B2_BUCKET, B2_KEY_ID, B2_APPLICATION_KEY, B2_S3_ENDPOINT, B2_REGION.
 Writes prefer the scoped B2_WRITE_KEY_ID / B2_WRITE_APPLICATION_KEY when present.
 Pushes under `+publishPrefix+` prefer B2_PUBLISH_KEY_ID / B2_PUBLISH_APPLICATION_KEY.
+B2X_SELFTEST_PREFIX=_b2x_selftest  scratch base for selftest; point it inside the
+granted prefix when the write key is namePrefix-scoped, or its write leg 403s.
 
 Transfer guards (guard.go) — every one is ON by default and disables at 0:
   B2X_STALL_S=120             no bytes on ONE part for this long -> retry the part
