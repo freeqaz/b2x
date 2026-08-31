@@ -232,8 +232,10 @@ func (c *config) normKey(p string) string {
 // alongside the key, honour it with this as the default.
 const publishPrefix = "checkpoints/"
 
-// pushCredFor picks the credential that can actually WRITE this key, and names
-// it for the log line.
+// pushCredFor picks the credential that can actually WRITE this key. It returns
+// the grant NAME ("publish", "write" or "read") — which is what the 401/403 hint
+// keys off — plus an optional note carrying the detail a log line wants, empty
+// when there is none.
 //
 // A box carries up to three grants and they are disjoint by construction: read
 // is bucket-wide and write-less, B2_WRITE_* covers one prefix (jobs/ on a jobs
@@ -243,18 +245,18 @@ const publishPrefix = "checkpoints/"
 // every call site falls back to its rclone line on any b2x failure. That is the
 // same shape as a publish stage 403'ing AFTER training completed, which is what
 // bought the third key in the first place.
-func (c *config) pushCredFor(key string) (credentials, string) {
+func (c *config) pushCredFor(key string) (cred credentials, grant, note string) {
 	if strings.HasPrefix(key, publishPrefix) {
 		if c.publishScoped {
-			return c.publishCred, "publish"
+			return c.publishCred, "publish", ""
 		}
 		// No grant. Fall through to the write cred rather than refusing: on a
 		// box with a bucket-wide key that write SUCCEEDS, and b2x is not the
 		// right place to re-litigate a scope the launcher decided.
-		return c.writeCred, "write(no publish grant — a 403 here is the scope, not b2x)"
+		return c.writeCred, "write", "no publish grant — a 403 here is the scope, not b2x"
 	}
 	if c.writeScoped {
-		return c.writeCred, "write"
+		return c.writeCred, "write", ""
 	}
-	return c.writeCred, "read(bucket-wide)"
+	return c.writeCred, "read", "bucket-wide"
 }

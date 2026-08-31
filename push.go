@@ -28,7 +28,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -45,6 +44,15 @@ type pushItem struct {
 	rel   string
 	size  int64
 	mtime time.Time
+}
+
+// name is what a log line should call this item. rel is empty for a single-file
+// push (see runPush), where the source path is the only meaningful name.
+func (it pushItem) name() string {
+	if it.rel != "" {
+		return it.rel
+	}
+	return it.abs
 }
 
 func runPush(ctx context.Context, c *s3Client, cfg *config, srcPath, dstKey string, o pushOpts, st *stats) error {
@@ -86,13 +94,15 @@ func runPush(ctx context.Context, c *s3Client, cfg *config, srcPath, dstKey stri
 			return err
 		}
 	} else {
-		items = []pushItem{{abs: srcPath, rel: filepath.Base(srcPath), size: fi.Size(), mtime: fi.ModTime()}}
 		// A file source with a dir-ish destination keeps the basename; otherwise
 		// the destination key is taken literally (rclone copyto semantics).
 		if strings.HasSuffix(dstKey, "/") {
 			dstKey += filepath.Base(srcPath)
 		}
-		items[0].rel = ""
+		// rel stays empty for a single file: the destination key is already the
+		// whole key, so pushKey must not append anything to it. Log lines use
+		// name() rather than rel for exactly that reason.
+		items = []pushItem{{abs: srcPath, size: fi.Size(), mtime: fi.ModTime()}}
 	}
 	if len(items) == 0 {
 		fmt.Fprintf(os.Stderr, "b2x: push — nothing to upload from %s\n", srcPath)
@@ -119,7 +129,6 @@ func runPush(ctx context.Context, c *s3Client, cfg *config, srcPath, dstKey stri
 	var todo []pushItem
 	for _, it := range items {
 		st.totalBytes += it.size
-		key := pushKey(prefix, it.rel, fi.IsDir())
 		lookup := it.rel
 		if !fi.IsDir() {
 			lookup = ""
@@ -129,7 +138,6 @@ func runPush(ctx context.Context, c *s3Client, cfg *config, srcPath, dstKey stri
 			st.skippedBytes.Add(it.size)
 			continue
 		}
-		_ = key
 		todo = append(todo, it)
 	}
 
@@ -179,23 +187,20 @@ func runPush(ctx context.Context, c *s3Client, cfg *config, srcPath, dstKey stri
 	// prefix-completion property: at any interruption, the newest K files are
 	// fully on B2 and file K+1 is an aborted MPU that never became visible.
 	var firstErr error
-	var mu sync.Mutex
 	for _, it := range todo {
 		if ctx.Err() != nil {
 			break
 		}
 		key := pushKey(prefix, it.rel, fi.IsDir())
 		if err := uploadOne(ctx, c, it, key, st); err != nil {
-			mu.Lock()
 			if firstErr == nil {
 				firstErr = err
 			}
-			mu.Unlock()
 			if ctx.Err() != nil {
 				break
 			}
 			// A single bad file must not abandon the rest of a durability flush.
-			fmt.Fprintf(os.Stderr, "b2x: push %s FAILED: %v (continuing)\n", it.rel, err)
+			fmt.Fprintf(os.Stderr, "b2x: push %s FAILED: %v (continuing)\n", it.name(), err)
 			continue
 		}
 		st.objs.Add(1)

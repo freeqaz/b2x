@@ -25,10 +25,9 @@ import (
 )
 
 const (
-	sigAlgorithm  = "AWS4-HMAC-SHA256"
-	sigService    = "s3"
-	emptyBodySHA  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	unsignedPaylo = "UNSIGNED-PAYLOAD"
+	sigAlgorithm = "AWS4-HMAC-SHA256"
+	sigService   = "s3"
+	emptyBodySHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 )
 
 type credentials struct {
@@ -93,8 +92,7 @@ func canonicalQuery(q url.Values) string {
 	return strings.Join(parts, "&")
 }
 
-// signRequest signs req in place. payloadSHA is the hex sha256 of the body, or
-// unsignedPaylo for streamed bodies whose bytes we do not want to buffer.
+// signRequest signs req in place. payloadSHA is the hex sha256 of the body.
 func signRequest(req *http.Request, cred credentials, payloadSHA string, now time.Time) {
 	amzDate := now.UTC().Format("20060102T150405Z")
 	dateStamp := now.UTC().Format("20060102")

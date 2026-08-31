@@ -85,6 +85,7 @@ Concurrency is COMPUTED from object size and CPU count — there is no
 
 Environment: B2_BUCKET, B2_KEY_ID, B2_APPLICATION_KEY, B2_S3_ENDPOINT, B2_REGION.
 Writes prefer the scoped B2_WRITE_KEY_ID / B2_WRITE_APPLICATION_KEY when present.
+Pushes under `+publishPrefix+` prefer B2_PUBLISH_KEY_ID / B2_PUBLISH_APPLICATION_KEY.
 
 Transfer guards (guard.go) — every one is ON by default and disables at 0:
   B2X_STALL_S=120             no bytes on ONE part for this long -> retry the part
@@ -177,9 +178,13 @@ func run() int {
 		// retry with another credential: a 403 here means the launcher's scope
 		// decision and this destination disagree, and silently re-presenting a
 		// wider key would turn a least-privilege boundary into a suggestion.
-		cred, credName := cfg.pushCredFor(dst)
-		cfg.usedGrant = strings.SplitN(credName, "(", 2)[0]
-		fmt.Fprintf(os.Stderr, "b2x: push %s using the %s grant\n", dst, credName)
+		cred, grant, note := cfg.pushCredFor(dst)
+		cfg.usedGrant = grant
+		detail := ""
+		if note != "" {
+			detail = " (" + note + ")"
+		}
+		fmt.Fprintf(os.Stderr, "b2x: push %s using the %s grant%s\n", dst, grant, detail)
 		c := newS3Client(cfg.endpoint, cfg.bucket, cred, cfg.concurrency)
 		st := newStats("push", args[0], dst, *jsonOut, cfg.concurrency)
 		err := runPush(ctx, c, cfg, args[0], dst, pushOpts{
@@ -302,8 +307,6 @@ func report(err error, cfg *config) int {
 		case cfg != nil && cfg.usedGrant == "publish":
 			hint = "the publish key is namePrefix-scoped to " + publishPrefix +
 				" — a write outside it returns 403 by design"
-		case cfg != nil && cfg.usedGrant == "write" && cfg.writeScoped:
-			hint = "the write key is namePrefix-scoped — a write outside its prefix returns 403 by design"
 		case cfg != nil && cfg.writeScoped:
 			hint = "the write key is namePrefix-scoped — a write outside its prefix returns 403 by design"
 		}

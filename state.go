@@ -38,7 +38,6 @@ const stateFileName = "state.json"
 type fileState struct {
 	Size     int64  `json:"size"`
 	ETag     string `json:"etag,omitempty"`
-	SHA256   string `json:"sha256,omitempty"` // from x-amz-meta-b2x-sha256 when we wrote the object
 	PartSize int64  `json:"part_size,omitempty"`
 	NParts   int    `json:"nparts,omitempty"`
 	// Done lists the completed part indices. Absent/empty with Complete=true

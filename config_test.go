@@ -29,7 +29,7 @@ func TestPushCredFollowsTheDestinationPrefix(t *testing.T) {
 		// merely starts with the word is a different place in the bucket.
 		{"checkpoints-scratch/x", "write"},
 	} {
-		got, _ := c.pushCredFor(tc.key)
+		got, _, _ := c.pushCredFor(tc.key)
 		if got.keyID != tc.want {
 			t.Errorf("pushCredFor(%q) = %q, want %q", tc.key, got.keyID, tc.want)
 		}
@@ -41,12 +41,15 @@ func TestPushCredFollowsTheDestinationPrefix(t *testing.T) {
 // decision made by the launcher should be re-litigated.
 func TestPushToCheckpointsWithoutPublishGrantFallsThrough(t *testing.T) {
 	c := &config{writeCred: credentials{keyID: "write"}, writeScoped: true}
-	got, name := c.pushCredFor("checkpoints/run-1/x")
+	got, grant, note := c.pushCredFor("checkpoints/run-1/x")
 	if got.keyID != "write" {
 		t.Errorf("got %q, want the write cred", got.keyID)
 	}
-	if !strings.Contains(name, "no publish grant") {
-		t.Errorf("the label must say a 403 here is the scope, not b2x; got %q", name)
+	if grant != "write" {
+		t.Errorf("grant = %q, want %q", grant, "write")
+	}
+	if !strings.Contains(note, "no publish grant") {
+		t.Errorf("the note must say a 403 here is the scope, not b2x; got %q", note)
 	}
 }
 
