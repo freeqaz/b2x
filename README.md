@@ -4,41 +4,9 @@ A single static Go binary that moves artifacts between Backblaze B2 (S3 API)
 and a rented GPU box — fast, idempotently, and with no tuning knobs to get
 wrong.
 
-**Status: alpha.** Battle-used, not battle-polished. This code spent months
-moving multi-GB model weights, checkpoints and environment tarballs on and off
-rented spot instances, but it was recently extracted from a private research
-monorepo — expect placeholder names where private infrastructure used to be,
-and design docs that still read like internal records.
-
-## Why this exists
-
-Throughput to a rented box is `flows × per-flow-rate`, because hosts
-traffic-shape **per TCP flow** (~4–16 MB/s measured). So parallelism is the
-whole game — and rclone made it surprisingly hard to get:
-
-- **The tuned convention could not be shared.** The flag set lived as a bash
-  array in one boot script, and a bash array cannot be exported to a child
-  process. Every call site re-invented the pull, and most ran stock.
-- **Even the tuned sites were silently clamped.** rclone caps
-  `--multi-thread-streams` at `ceil(size / --multi-thread-chunk-size)`, and
-  nothing set that chunk size. Asking for 16 streams on a 555 MB object got
-  **9 flows**; a 150 MB adapter asking for 16 got 3.
-- **Two interacting concurrency dimensions** (`--transfers` across files ×
-  `--multi-thread-streams` within a file) meant there was no single number to
-  set correctly.
-- **Tool-version skew.** `rclone.org/install.sh` once silently installed rclone
-  1.53 (2020) when `unzip` was missing — a client that cannot multi-thread at
-  all.
-
-b2x inverts the derivation: part **count** comes from the object size, part
-**size** is derived, and all parts schedule against one global in-flight
-budget. Under-parallelizing a large object is arithmetically impossible. On the
-same 555 MB object that rclone gave 9 flows, b2x got **68**, with zero knobs.
-It is `CGO_ENABLED=0`, stdlib-only (including a hand-rolled SigV4 signer), so
-there is no module graph and no runtime dependency to skew.
-
-Full design record, including the measurements and the transfer guards:
-[docs/DESIGN.md](docs/DESIGN.md).
+**Status: alpha.** Extracted from a private research monorepo after months of
+moving multi-GB model weights and checkpoints on and off spot instances.
+Expect placeholder names where private infrastructure used to be.
 
 ## Performance
 
@@ -52,19 +20,28 @@ its own defaults except the tuned-rclone row:
 | rclone `--multi-thread-streams 32` | 299 |
 | rclone (stock flags) | 105 |
 
-One number in that table is a bug this benchmark found rather than a win it
-scored: b2x's *own* shipped default measured **220 MB/s** — third from
-bottom — because the global concurrency budget was applied without regard to
-how many objects it was spread over, putting up to 128 concurrent range
-requests on a single key. B2 collapses under that. Capping in-flight parts
-per object and interleaving the queue took the same host from 223 to 668 MB/s
-on one object, 369 to 652 on a four-object directory, and 165 to 227 on push,
-with no flags.
+Single host, single region, one hour. Method, the concurrency curve behind the
+defaults, and what these numbers do *not* cover are in
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
-Single host, single region, one hour, sample sizes in the low single digits.
-The method, the full concurrency curve, the cache-probe null result, and the
-discarded first run that had an ordering bias are all in
-[docs/BENCHMARKS.md](docs/BENCHMARKS.md). Read that before quoting these.
+## Why this exists
+
+Throughput to a rented box is `flows × per-flow-rate`, because hosts
+traffic-shape **per TCP flow** (~4–16 MB/s measured). Parallelism is the whole
+game, and rclone makes it easy to lose: it fixes the chunk size and derives the
+stream count from it, so `--multi-thread-streams 16` on a 555 MB object
+silently becomes 9 flows. Two interacting concurrency dimensions
+(`--transfers` × `--multi-thread-streams`) mean there is no single number to
+set correctly, and the tuned flag set is unshareable — it lives as a bash array
+in one boot script, so every other call site runs stock.
+
+b2x inverts the derivation: part **count** comes from the object size, part
+**size** is derived, and parts schedule against one in-flight budget. On the
+same 555 MB object that rclone gave 9 flows, b2x gets **68**, with zero knobs.
+It is `CGO_ENABLED=0` and stdlib-only (including a hand-rolled SigV4 signer),
+so there is no module graph and no client version to skew.
+
+Full design record: [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Install
 
@@ -137,7 +114,7 @@ deliberately no `--transfers`/`--streams` flag:
 
 | variable | default | meaning |
 |---|---|---|
-| `B2X_CONCURRENCY` | `clamp(8 × NumCPU, 16, 192)` | global in-flight part budget (debugging override) |
+| `B2X_CONCURRENCY` | `clamp(8 × NumCPU, 16, 192)` | global in-flight part budget, narrowed to `32 × objects` (debugging override) |
 | `B2X_STALL_S` | `120` | no bytes on ONE part for this long → retry that part |
 | `B2X_PART_TRIES` | `3` | attempts per stalled part before the transfer fails |
 | `B2X_MIN_MBPS` | `3` | aggregate throughput floor (also derives the ceiling) |
