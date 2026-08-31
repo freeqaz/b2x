@@ -40,6 +40,32 @@ there is no module graph and no runtime dependency to skew.
 Full design record, including the measurements and the transfer guards:
 [docs/DESIGN.md](docs/DESIGN.md).
 
+## Performance
+
+Pulling 4 GB objects from B2 to a rented 80-core / 8.6 Gbps box, everything at
+its own defaults except the tuned-rclone row:
+
+| tool | MB/s |
+|---|---|
+| **b2x** | **≈650** |
+| s5cmd `-c 32` | 461 |
+| rclone `--multi-thread-streams 32` | 299 |
+| rclone (stock flags) | 105 |
+
+One number in that table is a bug this benchmark found rather than a win it
+scored: b2x's *own* shipped default measured **220 MB/s** — third from
+bottom — because the global concurrency budget was applied without regard to
+how many objects it was spread over, putting up to 128 concurrent range
+requests on a single key. B2 collapses under that. Capping in-flight parts
+per object and interleaving the queue took the same host from 223 to 668 MB/s
+on one object, 369 to 652 on a four-object directory, and 165 to 227 on push,
+with no flags.
+
+Single host, single region, one hour, sample sizes in the low single digits.
+The method, the full concurrency curve, the cache-probe null result, and the
+discarded first run that had an ordering bias are all in
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md). Read that before quoting these.
+
 ## Install
 
 ```sh
