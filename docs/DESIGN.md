@@ -244,6 +244,9 @@ ladder fix rather than a publish alone.
 
 ### 6-0. Rung 0 of the PULL ladder: the CDN weights mirror (2026-08-27)
 
+*Historical — describes the fleet this grew in (see herdd), not anything shipped
+in this repo.*
+
 `b2x_pull` tries the Cloudflare-fronted mirror **before** b2x, for sources under
 `base-models/` only. It lives inside the wrapper, so no call site changed. Gate:
 `B2_CDN_HOST`/`B2_CDN_BUCKET`/`B2_CDN_PREFIX` all set, a mappable `base-models/`
@@ -267,6 +270,9 @@ size-compares — and the box would run on zero-filled weights with every layer
 reporting success. `cdn_pull.py` ships beside `b2x_boot.sh` on every channel in
 §6 below, plus a bounded last-resort `rclone` fetch of `eval-env/cdn_pull.py`.
 
+*Historical — the bake/boot ladder below belongs to the fleet this grew in (see
+herdd); this repo ships only `publish.sh` and the binary it uploads.*
+
 Chicken-and-egg: on-box scripts need the transport before they have one. Two
 complementary channels:
 
@@ -287,6 +293,9 @@ There is no curl-only rung: the bucket is private, and Backblaze's **native**
 v2 and v3 return `bad_request: not currently supported on API version number N`).
 
 ### 6a. Rung 1 is version-aware, and has to be
+
+*Historical — describes the fleet this grew in (see herdd); what survives here is
+the version-stamping `publish.sh` does, noted in present tense below.*
 
 The two channels above are not independent: **baked beats published**, because
 rung 1 is checked first. So for as long as rung 1 accepted any working binary,
@@ -318,6 +327,15 @@ publishing only `tools/b2x/` leaves the stale copy winning on the train lane —
 deploy that reports success and changes nothing. Whatever bakes that companion
 env must re-stamp from the live `tools/b2x/LATEST` for the mirror-image reason:
 shipping the unstamped repo copy would un-deploy b2x on the next env bake.
+
+*[Present tense, this repo: the shim step is **opt-in**. `publish.sh` stamps and
+publishes a shim only when `B2X_BOOT_SHIM` points at a shim file — to
+`tools/b2x/b2x_boot.sh` plus every key listed in `B2X_BOOT_SHIM_KEYS` — and
+prints "publishing binary + LATEST only" when it is unset. Under `--keep-latest`
+the shim is skipped entirely, since that flag means boxes keep bootstrapping the
+previous version and a fresh stamp would override exactly that. The
+publish-to-every-key reasoning above is why `B2X_BOOT_SHIM_KEYS` exists: name
+every key your boot lane might read the shim from, or the copy read first wins.]*
 
 Verified 2026-08-03 without renting anything, against real B2, in the exact
 field shape (stale `20260801-000bf1ba` at `/usr/local/bin/b2x`, no
@@ -354,6 +372,9 @@ dogfoods b2x to upload itself, then re-pulls and compares checksums.
 
 ## 7. Backward compatibility
 
+*Historical — the call-site migration happened in the fleet this grew in (see
+herdd); nothing in this repo shells out to rclone.*
+
 Every migrated call site is one line whose `||` fallback is the **pre-existing
 rclone command, unchanged and visible**:
 
@@ -385,9 +406,12 @@ b2x selftest                  # credentials + multipart round-trip + idempotence
 `$B2` variables carry, so a migrated line keeps its original variable.
 
 Exit codes: `0` ok · `2` usage/config · `3` auth · `4` not-found · `5` transfer ·
-`6` integrity · `7` deadline.
+`6` integrity · `7` deadline · `8` slow (under the throughput floor, §5b).
 
 ## 9. Not done (deliberate)
+
+*Historical — the un-migrated sites are in the fleet this grew in (see herdd);
+only the "no adaptive concurrency ramp" bullet is about this repo's code.*
 
 - **~40 lower-impact rclone sites remain** (`b2_sync.sh`, `serve_vllm.sh`,
   `stage_run.sh`, `farm_*`, `chain-mining`, small `rcat`/`lsf` metadata calls).

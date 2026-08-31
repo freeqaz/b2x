@@ -3,19 +3,89 @@
 Written 2026-08-01 alongside the b2x landing (see [DESIGN.md](DESIGN.md)). These
 are observations from auditing every rclone call site in the fleet tooling that
 b2x was built for — now public as [herdd](https://github.com/freeqaz/herdd) —
-and none is actioned. **Nothing here proposes rewriting `jobd.sh` / `train.sh` /
-the control CLI into Go** — that was explicitly out of scope and I do not think
-it is the right next move either (see §5).
+and none of P1–P5 is actioned. **Nothing here proposes rewriting `jobd.sh` /
+`train.sh` / the control CLI into Go** — that was explicitly out of scope and I
+do not think it is the right next move either (see P5).
 
 > Preserved as the design record from the private monorepo b2x grew in. The
-> script names below are herdd's; internal-only docs it cited were not
+> script names in P1–P5 are herdd's; internal-only docs it cited were not
 > extracted and are described inline instead.
 
 The through-line: b2x fixed one instance of a general pattern — **a convention
 that exists only as prose or as an un-exportable shell fragment, applied by hand
 at N sites, drifting at most of them.** The remaining items are other instances.
 
+P0 was added later, on 2026-08-27, and is the one item about code that lives in
+**this** repo; it leads. P1–P5 are the original memo and concern herdd-side shell
+scripts.
+
 ---
+
+# Applies to this repo
+
+## P0 — `b2x selftest` cannot pass on ANY scoped box (2026-08-27)
+
+Found while building the scoped-key proof for the publish migration, and
+measured, not inferred.
+
+`selftest.go` writes its round-trip under `_b2x_selftest/<pid>-<nanos>/` using
+`cfg.writeCred`. On a real box that credential is the minted `-rw` key, scoped
+to ONE namePrefix (`jobs/` on a jobs box), and the third grant is scoped to
+`checkpoints/`. `_b2x_selftest/` is under neither, and the read key
+cannot write. So the write leg 403s by construction.
+
+Measured against freshly minted real keys (read `-ro`, write `-rw`
+namePrefix=`jobs/`, publish `-pub` namePrefix=`checkpoints/`):
+
+```
+b2x selftest -> exit 3
+  ok  list (signing + read credentials)
+  FAIL multipart upload: POST /…/_b2x_selftest/20260827-744564/roundtrip.bin:
+       HTTP 403 AccessDenied: not entitled
+```
+
+It fails honestly rather than silently — the hint correctly says the write key
+is namePrefix-scoped — but the on-box preflight the file's own header advertises
+("the $0 check before committing to a multi-GB pull") has never been runnable
+where it matters. It passes only on a workstation's unrestricted key, which is
+where it has always been run.
+
+Two further gaps in the same place:
+
+- **`selftest` never exercises the publish grant at all.** It builds clients
+  from `readCred` and `writeCred` only, so the credential a training run's
+  publish stage depends on is the one grant no preflight touches. That is the
+  key whose absence 403'd both arms of a training run AFTER training completed.
+- **b2x cannot learn the write prefix.** `B2_PUBLISH_PREFIX` and the write
+  prefix are both workstation-side mint inputs; the launcher's B2-env shipper
+  ships only key IDs and secrets. So the fix is not local to `selftest.go` — it
+  needs the launcher to ship the granted prefixes (say `B2_WRITE_PREFIX` /
+  `B2_PUBLISH_PREFIX`) and the selftest to write inside one of them, testing
+  each grant it was actually given. That is a launcher change, hence a decision
+  rather than a patch.
+
+**Effort:** ~2 h including the launch-spec change and its tests. **Risk:** low,
+but it touches the FROZEN shape of the launcher's B2-env return value, so read
+that first.
+
+**Addendum 2026-08-31 (this repo).** The standalone half is now fixed:
+`B2X_SELFTEST_PREFIX` lets the operator place the selftest scratch inside the
+prefix their write key is actually granted — `B2X_SELFTEST_PREFIX=jobs/_b2x_selftest`
+against a `namePrefix=jobs/` write key — so the round-trip runs where it matters
+without any launcher change. The prefix is operator-supplied, not discovered, so
+the second gap above stands unchanged: b2x still cannot learn its granted
+prefixes, and **`selftest` still builds clients from `readCred`/`writeCred` only
+and never exercises the publish grant.**
+
+---
+
+# Historical — the fleet tooling this grew alongside (now herdd)
+
+P1–P5 are the original 2026-08-01 memo. They audit shell scripts that stayed in
+the private monorepo and are now public as
+[herdd](https://github.com/freeqaz/herdd); none is actionable from this repo.
+They are kept because the reasoning — and the measurements behind it — is the
+value.
 
 ## P1 — `b2_sync.sh` now disagrees with the convention it predates
 
@@ -114,52 +184,5 @@ effort**, because it converts "we fixed the sites" into "the sites stay fixed."
 
 ---
 
-**Suggested order if any of this is taken up:** P4 (guard the win), then P1
-(cheap, removes the last contradicting default), then P2, then P3.
-
----
-
-## P0 — `b2x selftest` cannot pass on ANY scoped box (2026-08-27)
-
-Found while building the scoped-key proof for the publish migration, and
-measured, not inferred.
-
-`selftest.go` writes its round-trip under `_b2x_selftest/<pid>-<nanos>/` using
-`cfg.writeCred`. On a real box that credential is the minted `-rw` key, scoped
-to ONE namePrefix (`jobs/` on a jobs box), and the third grant is scoped to
-`checkpoints/`. `_b2x_selftest/` is under neither, and the read key
-cannot write. So the write leg 403s by construction.
-
-Measured against freshly minted real keys (read `-ro`, write `-rw`
-namePrefix=`jobs/`, publish `-pub` namePrefix=`checkpoints/`):
-
-```
-b2x selftest -> exit 3
-  ok  list (signing + read credentials)
-  FAIL multipart upload: POST /…/_b2x_selftest/20260827-744564/roundtrip.bin:
-       HTTP 403 AccessDenied: not entitled
-```
-
-It fails honestly rather than silently — the hint correctly says the write key
-is namePrefix-scoped — but the on-box preflight the file's own header advertises
-("the $0 check before committing to a multi-GB pull") has never been runnable
-where it matters. It passes only on a workstation's unrestricted key, which is
-where it has always been run.
-
-Two further gaps in the same place:
-
-- **`selftest` never exercises the publish grant at all.** It builds clients
-  from `readCred` and `writeCred` only, so the credential a training run's
-  publish stage depends on is the one grant no preflight touches. That is the
-  key whose absence 403'd both arms of a training run AFTER training completed.
-- **b2x cannot learn the write prefix.** `B2_PUBLISH_PREFIX` and the write
-  prefix are both workstation-side mint inputs; the launcher's B2-env shipper
-  ships only key IDs and secrets. So the fix is not local to `selftest.go` — it
-  needs the launcher to ship the granted prefixes (say `B2_WRITE_PREFIX` /
-  `B2_PUBLISH_PREFIX`) and the selftest to write inside one of them, testing
-  each grant it was actually given. That is a launcher change, hence a decision
-  rather than a patch.
-
-**Effort:** ~2 h including the launch-spec change and its tests. **Risk:** low,
-but it touches the FROZEN shape of the launcher's B2-env return value, so read
-that first.
+**Suggested order if any of this is taken up (herdd-side):** P4 (guard the win),
+then P1 (cheap, removes the last contradicting default), then P2, then P3.
