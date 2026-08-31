@@ -60,7 +60,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `b2x `+version+` — B2 <-> vast box artifact transfer
+	fmt.Fprint(os.Stderr, `b2x `+version+` — Backblaze B2 <-> GPU box artifact transfer
 
   b2x pull <b2-path> <local-path>    idempotent download (skips what is present, resumes partials)
   b2x push <local-path> <b2-path>    multipart upload (newest-first, deadline-aware)

@@ -1,7 +1,7 @@
 package main
 
 // selftest.go — `b2x selftest`: prove credentials, signing, and a full
-// multipart round-trip work on THIS box, under a scratch prefix it cleans up.
+// multipart round-trip work on THIS box, under a scratch prefix.
 //
 // This is the on-box preflight a boot script can run before committing to a
 // multi-GB pull, and the $0 check an agent can run from the laptop. It never

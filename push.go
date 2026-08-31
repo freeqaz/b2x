@@ -269,7 +269,7 @@ func uploadOne(ctx context.Context, c *s3Client, it pushItem, key string, st *st
 		// the plan (and than the hash above) accounts for.
 		data := make([]byte, it.size)
 		if _, err := io.ReadFull(f, data); err != nil {
-			return fmt.Errorf("%s: short read at %d bytes: %w", it.rel, it.size, err)
+			return fmt.Errorf("%s: short read at %d bytes: %w", it.name(), it.size, err)
 		}
 		if err := c.putObject(ctx, key, data, meta); err != nil {
 			return err
@@ -296,7 +296,7 @@ func uploadOne(ctx context.Context, c *s3Client, it pushItem, key string, st *st
 		if rn, rerr := f.ReadAt(buf, off); rerr != nil || int64(rn) != n {
 			if rerr == nil || rerr == io.EOF {
 				return fmt.Errorf("%s: part %d short read (%d of %d bytes at %d) — file shrank under the upload",
-					it.rel, i+1, rn, n, off)
+					it.name(), i+1, rn, n, off)
 			}
 			return rerr
 		}

@@ -110,7 +110,7 @@ func envAny(names ...string) string {
 	return ""
 }
 
-var errNoCreds = errors.New("b2x: no B2 credentials in environment")
+var errNoCreds = errors.New("no B2 credentials in environment (set B2_KEY_ID and B2_APPLICATION_KEY)")
 
 func loadConfig() (*config, error) {
 	c := &config{
@@ -122,7 +122,7 @@ func loadConfig() (*config, error) {
 		c.region = "us-west-004"
 	}
 	if c.bucket == "" {
-		return nil, fmt.Errorf("b2x: B2_BUCKET not set")
+		return nil, fmt.Errorf("B2_BUCKET not set")
 	}
 	if c.endpoint == "" {
 		// Derivable from the region for B2 — one less thing a caller must set.
