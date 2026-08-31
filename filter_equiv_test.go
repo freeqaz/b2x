@@ -1,9 +1,10 @@
 package main
 
 // filter_equiv_test.go — b2x's file SELECTION must equal rclone's, filter for
-// filter, on the shapes the adapter-publish sites actually pass.
+// filter, on the shapes the adapter-publish call sites this replaced actually
+// pass.
 //
-// The publish sites are `rclone copy --include "/$f" … "$OUT" "$PUB_DEST"`
+// Those publish sites are `rclone copy --include "/$f" … "$OUT" "$PUB_DEST"`
 // wrapped in a 3-try loop whose success condition is a read-back hash check.
 // Migrating one to b2x changes WHICH BYTES GET PUBLISHED, so the evidence for
 // the move has to be a selection comparison against the tool being replaced,
@@ -31,7 +32,9 @@ import (
 // publishFixture builds a tree shaped like a real training OUT dir: the
 // published payload at the root, and the things that must NOT ship — a
 // mid-training checkpoint carrying same-named files, log dirs, and the
-// publish stage's own scratch files.
+// publish stage's own scratch files. PUB_* below are the file-set variable
+// names the publish script this replaced used; they are kept so the fixture
+// still maps onto the flags in that script's rclone lines.
 func publishFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -151,9 +154,9 @@ func TestPublishFilterSelectionMatchesRclone(t *testing.T) {
 		{"anchored glob", []string{"--include", "/*.json"}},
 		{"anchored dir glob", []string{"--include", "/checkpoint-*/**"}},
 		{"anchored exclude", []string{"--exclude", "/README.md"}},
-		// A MIXED vector where nothing overlaps: the only mixed shape any call
-		// site uses (jobd.sh's checkpoint flush) and the only one rclone defines
-		// — see TestMixedIncludeExcludeIsUndefinedInRclone.
+		// A MIXED vector where nothing overlaps: the only mixed shape any known
+		// call site uses (a boot script's checkpoint flush) and the only one
+		// rclone defines — see TestMixedIncludeExcludeIsUndefinedInRclone.
 		{"disjoint include plus exclude", []string{
 			"--exclude", "/README.md",
 			"--include", "/adapter_config.json",
@@ -188,9 +191,9 @@ func TestPublishFilterSelectionMatchesRclone(t *testing.T) {
 // the cheaper error. Closing it would also mean teaching main.go to observe the
 // interleaving, which Go's flag package does not preserve across two vectors.
 //
-// Unreachable in the fleet: the only mixed-filter site is jobd.sh's checkpoint
-// flush (--exclude '.preempt_*' plus --include globs from .checkpoint.globs)
-// and those cannot match the same path.
+// Unreachable on the fleet this grew in: the only mixed-filter call site was a
+// boot script's checkpoint flush (--exclude '.preempt_*' plus --include globs
+// read from a file) and those cannot match the same path.
 func TestMixedIncludeExcludeIsUndefinedInRclone(t *testing.T) {
 	inc := []string{"/adapter_config.json", "/adapter_model.safetensors"}
 	exc := []string{"/adapter_config.json"}

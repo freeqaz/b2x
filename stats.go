@@ -104,9 +104,9 @@ func (s *stats) mbps() float64 {
 }
 
 // progressLine is deliberately spelled with a trailing "<N> MiB/s" token so the
-// EXISTING jobd.sh `_last_mbps` regex ([0-9.]+ [KMGT]?i?B/s) still finds a rate
-// in a stats file written by b2x. Backward compatibility with the unmigrated
-// reader is cheaper than migrating the reader.
+// legacy boot-script scrapers that regex a rate out of a stats file
+// ([0-9.]+ [KMGT]?i?B/s) still find one when b2x wrote it. Backward
+// compatibility with an unmigrated reader is cheaper than migrating the reader.
 func (s *stats) progressLine() string {
 	d := s.done.Load()
 	pct := ""
@@ -177,8 +177,9 @@ func (s *stats) finish(statsEnvPath string) {
 		s.emitJSON("b2x_done")
 	}
 	// The verdict word is on the LAST line of stderr for any non-ok outcome, so
-	// the tail of a stats file (which is all jobd's beacon and a `tail -c 200`
-	// diagnostic ever read) carries the cause rather than the last progress line.
+	// the tail of a stats file (which is all a boot-script beacon or a
+	// `tail -c 200` diagnostic ever reads) carries the cause rather than the last
+	// progress line.
 	fmt.Fprintf(os.Stderr,
 		"b2x: %s %s — %s in %.1fs (%.1f MiB/s), %d objects, %d skipped (%s already present), %d parts, %d retries\n",
 		s.Op, map[bool]string{true: "done", false: "ENDED " + s.verdict}[s.verdict == "ok"],
@@ -189,8 +190,9 @@ func (s *stats) finish(statsEnvPath string) {
 	if statsEnvPath == "" {
 		return
 	}
-	// KEY=VALUE for `source`/`eval` in the migrated shell call sites. Field
-	// names match what boot_mark pull_done already publishes.
+	// KEY=VALUE for `source`/`eval` in the shell call sites this replaced. Field
+	// names match what those boot scripts already published for a pull, so a
+	// scraper joining on them keeps working.
 	body := fmt.Sprintf(
 		"B2X_BYTES=%d\nB2X_SECS=%.1f\nB2X_MBPS=%.1f\nB2X_OBJECTS=%d\nB2X_SKIPPED=%d\nB2X_SKIPPED_BYTES=%d\nB2X_STREAMS=%d\nB2X_RETRIES=%d\nB2X_VERDICT=%s\n",
 		s.done.Load(), s.elapsed(), s.mbps(), s.objs.Load(),

@@ -219,8 +219,8 @@ func TestFloorCondemnsOnlyAfterAFullWindow(t *testing.T) {
 func TestFloorNeverCondemnsAHealthyTransfer(t *testing.T) {
 	st := newStats("pull", "s", "d", false, 4)
 	// 1 MiB per 20 ms ~= 50 MB/s, against a 3 MB/s floor: the real-world margin
-	// is wider still (the SLOWEST arm ever measured on a rented box was 58 MB/s,
-	// WEIGHTS_TRANSPORT_PLAN.md §2).
+	// is wider still (the SLOWEST arm ever measured on a rented box was 58 MB/s;
+	// measured on the fleet this grew in, see docs/DESIGN.md §5b).
 	stop := make(chan struct{})
 	go func() {
 		for {
@@ -321,8 +321,9 @@ func TestDeadlineAndSlowAreDistinguishable(t *testing.T) {
 
 func TestStatsEnvCarriesTheVerdict(t *testing.T) {
 	// --stats-env is how the shell learns the outcome without parsing prose, and
-	// jobd/train.sh already source this file. A timeout that reaches the shell as
-	// an indistinguishable non-zero exit is the failure mode we are removing.
+	// the boot/train scripts this replaced already source that file. A timeout
+	// that reaches the shell as an indistinguishable non-zero exit is the failure
+	// mode we are removing.
 	p := filepath.Join(t.TempDir(), "stats.env")
 	st := newStats("pull", "src", "dst", false, 8)
 	st.addBytes(1 << 20)

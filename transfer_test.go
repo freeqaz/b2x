@@ -593,7 +593,7 @@ func TestStatsEnvFileForShellCallers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// These exact names are what the migrated boot_mark pull_done lines consume.
+	// These exact names are what the boot-script pull-completion lines consume.
 	for _, want := range []string{"B2X_BYTES=", "B2X_SECS=", "B2X_MBPS=", "B2X_OBJECTS=", "B2X_SKIPPED_BYTES="} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("stats env missing %s:\n%s", want, b)
@@ -601,14 +601,15 @@ func TestStatsEnvFileForShellCallers(t *testing.T) {
 	}
 }
 
-// TestProgressLineStaysGreppableByJobd: jobd.sh's _last_mbps greps a stats file
-// for `[0-9.]+ [KMGT]?i?B/s`. An unmigrated reader must keep finding a rate.
-func TestProgressLineStaysGreppableByJobd(t *testing.T) {
+// TestProgressLineKeepsLegacyMiBpsToken: the legacy boot-script scrapers grep a
+// stats file for `[0-9.]+ [KMGT]?i?B/s`. An unmigrated reader must keep finding
+// a rate.
+func TestProgressLineKeepsLegacyMiBpsToken(t *testing.T) {
 	st := newStats("pull", "a", "b", false, 32)
 	st.addBytes(50 << 20)
 	line := st.progressLine()
 	if !strings.Contains(line, "MiB/s") {
-		t.Errorf("progress line lost the MiB/s token jobd.sh greps for: %q", line)
+		t.Errorf("progress line lost the MiB/s token legacy scrapers grep for: %q", line)
 	}
 }
 
@@ -731,15 +732,15 @@ func TestPushRefusesAShrunkSource(t *testing.T) {
 // runPull HEADs its source first to tell a single-file pull from a prefix pull.
 // A prefix-restricted or bucketIds-restricted B2 key answers HeadObject on a
 // key it cannot see with 403, NEVER 404 — it will not confirm or deny
-// existence. Every fleet box carries exactly such a key (b2_mint_key.mint_pair's
-// `-ro`: listFiles+readFiles on one bucketId), so treating that 403 as fatal
-// made EVERY prefix pull on EVERY scoped box fail before it listed anything.
+// existence. Every rented box carries exactly such a key (read-only:
+// listFiles+readFiles on one bucketId), so treating that 403 as fatal made
+// EVERY prefix pull on EVERY scoped box fail before it listed anything.
 //
-// Measured live 2026-08-27 against a freshly minted `-ro` key: `stat` on an
+// Measured live 2026-08-27 against a freshly minted read-only key: `stat` on an
 // existing object 200, `stat` on any absent key 403, `ls` fine, `pull <prefix>`
 // exit 3 and zero bytes. Invisible in production because every call site is
-// `b2x_pull … || <rclone line>` and the rclone line works — the same
-// silent-fallback class test_transfer_sites.py exists for.
+// `b2x pull … || <rclone line>` and the rclone line works — the silent-fallback
+// class that hides a total failure behind a slow success.
 func TestPrefixPullSurvivesA403OnTheProbeHEAD(t *testing.T) {
 	f, c, cfg := testHarness(t)
 	f.headMissing403.Store(true)

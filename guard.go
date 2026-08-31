@@ -2,14 +2,13 @@ package main
 
 // guard.go — the box-side answer to "the transfer is not moving".
 //
-// WHY THIS FILE EXISTS (owner ruling 2026-08-02). Stall DETECTION for a box is a
-// control-plane function: a wedged box is exactly the one that will not answer a
-// probe, so anything judging box HEALTH must be derivable from what the
-// workstation observes (vast API samples, fleetd's journal, spend). That ruling
-// carved out ONE corollary as its own scope, and this is it:
-//
-//   "pulling from b2 on the box is another place where we need to have timeouts
-//    set to observe for slow, flaky box networking on hosts."
+// WHY THIS FILE EXISTS. Stall DETECTION for a box is a control-plane function:
+// a wedged box is exactly the one that will not answer a probe, so anything
+// judging box HEALTH must be derivable from what the workstation observes
+// (provider API samples, the fleet controller's journal, spend) rather than
+// from a process running on the box itself. That leaves exactly one corollary
+// for the transfer to own: pulling from B2 on the box is a place that needs its
+// own timeouts, so slow or flaky host networking is observable at all.
 //
 // This is NOT stall detection for the box. It is the much narrower thing a
 // transfer must do for itself: bound its own runtime so a slow or flaky host
@@ -30,9 +29,9 @@ package main
 // Note the irony this fixes: rclone — the fallback b2x replaced on the hot paths
 // — defaults to `--timeout 5m` (IO idle) and `--contimeout 1m`, so the OLD code
 // was bounded and the NEW transport was not. The three guards below restore and
-// tighten that property, with the two signals the owner asked for on the
-// docker-pull side (herdd `_job_pull_watchdog_tick`): a wall-clock ceiling and
-// a bytes-per-second floor.
+// tighten that property, using the same two signals the fleet controller's
+// docker-pull watchdog uses (the fleet tooling b2x grew alongside, now public
+// as herdd): a wall-clock ceiling and a bytes-per-second floor.
 //
 // THE THREE GUARDS, and why each one has to exist separately:
 //
@@ -153,11 +152,11 @@ func (e *stallError) Error() string {
 // floorWatch samples the transferred-byte counter and condemns when the rate
 // across a full window sits under the floor.
 //
-// Deliberately mirrors the control-plane docker-pull watchdog
-// (herdd `_job_pull_watchdog_tick`, BOOT_MIN_MBPS over BOOT_MBPS_WINDOW_S):
-// AGGREGATE bytes over a FULL window, never an instantaneous sample. Vast hosts
-// shape per TCP flow, so a single slow flow with a healthy aggregate must never
-// condemn — the same reason the boot-side knob is documented as aggregate.
+// Deliberately mirrors the fleet controller's docker-pull watchdog (herdd;
+// BOOT_MIN_MBPS over BOOT_MBPS_WINDOW_S): AGGREGATE bytes over a FULL window,
+// never an instantaneous sample. Hosts shape per TCP flow, so a single slow
+// flow with a healthy aggregate must never condemn — the same reason the
+// boot-side knob is documented as aggregate.
 //
 // It arms only while parts are actually in flight, so the LIST pass, the sha256
 // --verify pass, and an all-skipped idempotent re-pull (all of which legitimately

@@ -60,8 +60,8 @@ type config struct {
 // number against its evidence in one place.
 const (
 	// 120 s of ZERO bytes on one part. b2x reads into a 1 MiB buffer, so even a
-	// flow shaped to the bottom of the observed per-flow band (~1 MB/s,
-	// vast-per-flow-image-layering) returns a read about every second. 120 s is
+	// flow shaped to the bottom of the observed per-flow band (~1 MB/s; hosts
+	// shape at ~4-16 MB/s per flow) returns a read about every second. 120 s is
 	// a flow delivering under ~8 KB/s — dead, not slow. rclone's equivalent
 	// (--timeout, IO idle) defaults to 5m; we are tighter because a stall here
 	// RETRIES the part instead of failing the transfer, so the cost of being
@@ -70,18 +70,17 @@ const (
 
 	// 3 MB/s aggregate. Every B2 pull ever measured from a rented box came in at
 	// 58-101 MB/s on 1 Gbps-class hosts and up to 1008 MB/s on a fat host
-	// (WEIGHTS_TRANSPORT_PLAN.md §2/§2b) — the SLOWEST arm on the slowest box was
-	// 58.0 MB/s. 3 MB/s is ~19x below that, so a false positive would need a host
-	// nineteen times slower than the worst one we have ever rented. It is also
-	// the number the owner named as the bad-host cut for the docker-pull side on
-	// 2026-08-02 (vastconf._BOOT_KNOB_DEFAULTS documents that directive next to
-	// BOOT_MIN_MBPS=5). We take the directive's 3 rather than the boot lane's 5
-	// on purpose: the boot watchdog kills a box that is not yet billing GPU,
-	// while this one aborts work in progress, so it should be the more
-	// conservative of the two.
+	// (measured on the fleet this grew in; see docs/DESIGN.md §5b) — the SLOWEST
+	// arm on the slowest box was 58.0 MB/s. 3 MB/s is ~19x below that, so a false
+	// positive would need a host nineteen times slower than the worst one ever
+	// rented. The boot-side docker-pull watchdog cuts a bad host at 5 MB/s; this
+	// floor deliberately takes the more conservative 3, because the boot watchdog
+	// kills a box that is not yet billing GPU while this one aborts work in
+	// progress.
 	defaultMinMBps = 3.0
 
-	// 300 s window, matching BOOT_MBPS_WINDOW_S exactly. A full window must
+	// 300 s window, matching the boot-side docker-pull watchdog's averaging
+	// window (BOOT_MBPS_WINDOW_S) exactly. A full window must
 	// elapse before any verdict, so this is also the minimum time-to-condemn.
 	// Long enough that a B2 5xx storm riding out its backoff cannot trip it.
 	defaultFloorWindowS = 300
@@ -206,10 +205,10 @@ func envFloat(name string, def float64) float64 {
 // This is what lets a migrated shell line keep its existing "$B2/path" variable
 // verbatim instead of every site growing a new path spelling.
 func (c *config) normKey(p string) string {
-	// b2p: is the CHECKPOINTS remote. It was missing here, so a publish site
-	// passing "b2p:$B2_BUCKET/checkpoints/..." got the whole spelling back as
-	// the key -- wrong destination, and it also could not match the
-	// checkpoints/ prefix that pushCredFor routes on.
+	// Every remote spelling a call site may pass must be stripped here: an
+	// unrecognised one comes back verbatim as the key, which is both the wrong
+	// destination and unable to match the checkpoints/ prefix pushCredFor
+	// routes on. b2p: is the CHECKPOINTS remote.
 	for _, pre := range []string{"b2w:", "b2p:", "b2:", "b2eu:"} {
 		if strings.HasPrefix(p, pre) {
 			p = strings.TrimPrefix(p, pre)
@@ -224,14 +223,13 @@ func (c *config) normKey(p string) string {
 // what the key is scoped to is the whole mechanism; a wider test would send
 // jobs/ writes at a key that cannot make them.
 //
-// Hardcoded on purpose, and MEASURED so: B2_PUBLISH_PREFIX (which can retarget
-// or disable the grant) is read by b2_mint_key.publish_prefix() on the
-// WORKSTATION at mint time and is never shipped into box env —
-// launch/spec.py:_ship_b2_env returns only the KEY_ID/APPLICATION_KEY pair, and
-// jobd_boot.sh consumes only those two. A b2x on a box therefore cannot observe
-// a retarget, and reading the var here would let a stray workstation value
-// change routing on a box whose key it does not describe. If the prefix ever
-// starts shipping, honour it with this as the default.
+// Hardcoded on purpose, and MEASURED so: the launcher that mints these scoped
+// keys resolves the publish prefix on the WORKSTATION at mint time and ships
+// only the KEY_ID/APPLICATION_KEY pair into box env — the granted prefixes
+// never travel. A b2x on a box therefore cannot observe a retarget, and reading
+// an env var here would let a stray workstation value change routing on a box
+// whose key it does not describe. If a B2_PUBLISH_PREFIX ever starts shipping
+// alongside the key, honour it with this as the default.
 const publishPrefix = "checkpoints/"
 
 // pushCredFor picks the credential that can actually WRITE this key, and names

@@ -47,8 +47,8 @@ const (
 	// above S3's 5 MiB multipart minimum, so upload plans are always legal.
 	minPartSize = 8 << 20
 
-	// maxPartsPerObject caps the fan-out for a single object. The fat-host
-	// ceiling bench (bench/results/20260710-fat-host-ceiling-4090-18gbps.txt)
+	// maxPartsPerObject caps the fan-out for a single object. A fat-host ceiling
+	// benchmark (summarized in docs/DESIGN.md §5b)
 	// measured a single 4.9 GB shard at 229 MB/s @ 8 streams, 344 @ 16, 415 @
 	// 32, 467 @ 64 — still climbing at 64, but with clearly diminishing returns
 	// and rising memory. 128 leaves headroom above the measured knee without

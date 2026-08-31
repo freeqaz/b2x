@@ -150,9 +150,10 @@ func runPush(ctx context.Context, c *s3Client, cfg *config, srcPath, dstKey stri
 	}
 
 	// GUARDS (guard.go). Same two signals as pull, same precedence: an explicit
-	// --deadline is a hard budget the caller means (preempt_trap's 40 s eviction
-	// flush) and always wins. Without one, a push that would otherwise hang on a
-	// half-open socket gets a ceiling derived from its own byte count.
+	// --deadline is a hard budget the caller means (a spot-eviction trap flushing
+	// inside a 40 s hard timeout) and always wins. Without one, a push that would
+	// otherwise hang on a half-open socket gets a ceiling derived from its own
+	// byte count.
 	dl, dlWhy := o.deadline, "explicit --deadline"
 	if dl <= 0 {
 		dl, dlWhy = autoDeadline(sumSizes(todo), cfg), "derived from bytes / B2X_MIN_MBPS"

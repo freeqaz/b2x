@@ -22,8 +22,9 @@ package main
 //   b2x version | selftest
 //
 // b2-path may be given bare ("base-models/qwen3-14b") or in the rclone spelling
-// the migrated shell already uses ("b2:$B2_BUCKET/base-models/qwen3-14b"), so a
-// call site keeps its existing $B2 variable verbatim.
+// the shell call sites this replaced already used
+// ("b2:$B2_BUCKET/base-models/qwen3-14b"), so a migrating call site keeps its
+// existing $B2 variable verbatim.
 
 import (
 	"context"
@@ -318,10 +319,10 @@ func report(err error, cfg *config) int {
 
 // matchFilters applies --include/--exclude to a relative path. Globs match
 // either the full relative path or the basename, and a trailing "/**" matches
-// everything under a directory — the shapes the migrated rclone call sites use
-// (e.g. --exclude 'checkpoint-*/**', --exclude STATUS). A LEADING "/" anchors
-// the pattern at the transfer root (rclone semantics), which is what the
-// adapter-publish sites spell as --include "/adapter_model.safetensors".
+// everything under a directory — the shapes the rclone call sites this replaced
+// use (e.g. --exclude 'checkpoint-*/**', --exclude STATUS). A LEADING "/"
+// anchors the pattern at the transfer root (rclone semantics), which is what an
+// adapter-publish site spells as --include "/adapter_model.safetensors".
 func matchFilters(rel string, includes, excludes []string) bool {
 	for _, g := range excludes {
 		if globMatch(g, rel) {
@@ -346,8 +347,8 @@ func matchFilters(rel string, includes, excludes []string) bool {
 //
 // The leading-"/" rule is NOT a bare strip. Unanchored patterns fall back to
 // matching the BASENAME, so a strip alone would make "/adapter_config.json"
-// keep matching "checkpoint-40/adapter_config.json" — the precise widening the
-// publish sites use root anchoring to prevent. Anchoring therefore both strips
+// keep matching "checkpoint-40/adapter_config.json" — the precise widening a
+// publish site uses root anchoring to prevent. Anchoring therefore both strips
 // the "/" AND withdraws the basename fallback.
 func globMatch(pattern, rel string) bool {
 	anchored := strings.HasPrefix(pattern, "/")

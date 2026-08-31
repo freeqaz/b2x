@@ -5,8 +5,8 @@ package main
 // THE SECOND BUG this component exists to kill: weights are re-pulled on resume
 // even when they are already on the box's disk. A parked/resumed box keeps its
 // disk; a preempted job's box may already hold most of a 24 GB base model. The
-// existing `.complete` marker in jobd's asset_pull is an ad-hoc partial version
-// of this (per-asset, all-or-nothing, no partial resume, no integrity).
+// ad-hoc per-asset `.complete` markers this replaced were a partial version of
+// this (all-or-nothing, no partial resume, no integrity).
 //
 // Design:
 //   * ONE state file per destination root: <dstroot>/.b2x/state.json. Not N

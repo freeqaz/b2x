@@ -55,11 +55,11 @@ func runPull(ctx context.Context, c *s3Client, cfg *config, srcKey, dstPath stri
 	//
 	// 403 IS A NEGATIVE ANSWER HERE, NOT AN ERROR. A prefix-restricted or
 	// bucketIds-restricted B2 key answers HeadObject on a key it cannot see
-	// with 403, never 404 — it will not confirm or deny existence. Every box in
-	// the fleet carries exactly such a key (b2_mint_key.mint_pair's `-ro`,
-	// listFiles+readFiles on one bucketId), so treating 403 as fatal made EVERY
-	// prefix pull fail before listing anything. It was invisible because every
-	// call site is `b2x_pull … || <rclone line>` and the rclone line works.
+	// with 403, never 404 — it will not confirm or deny existence. Every rented
+	// box carries exactly such a key (read-only, listFiles+readFiles on one
+	// bucketId), so treating 403 as fatal made EVERY prefix pull fail before
+	// listing anything. It was invisible because every call site is
+	// `b2x pull … || <rclone line>` and the rclone line works.
 	// Falling through costs nothing: the LIST below is the authoritative check
 	// and a genuinely unentitled key fails there with its own message.
 	var objs []s3Object
@@ -199,8 +199,8 @@ func runPull(ctx context.Context, c *s3Client, cfg *config, srcKey, dstPath stri
 	// --- drain the queue ------------------------------------------------------
 	// GUARDS (guard.go): a wall-clock ceiling and an aggregate throughput floor,
 	// both armed only around the byte-moving phase. An explicit --deadline always
-	// wins over the derived one — a caller with a hard budget (preempt_trap's
-	// 40 s flush) means it literally.
+	// wins over the derived one — a caller with a hard budget (a spot-eviction
+	// trap flushing inside a 40 s hard timeout) means it literally.
 	dl, dlWhy := o.deadline, "explicit --deadline"
 	if dl <= 0 {
 		dl, dlWhy = autoDeadline(toFetch, cfg), "derived from bytes / B2X_MIN_MBPS"

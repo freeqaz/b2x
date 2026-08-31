@@ -10,7 +10,7 @@ package main
 // AWS-published test vectors in sigv4_test.go.
 //
 // SECRETS: nothing in this file ever logs. The signing key derivation and the
-// Authorization header stay inside the request; redact() in errors.go is what
+// Authorization header stay inside the request; redactURL() in s3.go is what
 // guards anything that escapes.
 
 import (

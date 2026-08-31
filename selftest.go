@@ -5,8 +5,8 @@ package main
 //
 // This is the on-box preflight a boot script can run before committing to a
 // multi-GB pull, and the $0 check an agent can run from the laptop. It never
-// touches base-models/, checkpoints/, runs/, or eval-env/ — everything happens
-// under _b2x_selftest/<pid>-<nanos>/.
+// touches your data prefixes — everything happens under
+// _b2x_selftest/<pid>-<nanos>/.
 //
 // Note it does NOT delete: B2 keys handed to a rented box are best minted
 // WITHOUT deleteFiles, so a self-cleaning test would fail wherever that policy
