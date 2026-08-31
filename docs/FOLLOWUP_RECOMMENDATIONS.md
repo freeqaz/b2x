@@ -28,7 +28,7 @@ scripts.
 Found while building the scoped-key proof for the publish migration, and
 measured, not inferred.
 
-`selftest.go` writes its round-trip under `_b2x_selftest/<pid>-<nanos>/` using
+`selftest.go` writes its round-trip under `_b2x_selftest/<date>-<pid>/` using
 `cfg.writeCred`. On a real box that credential is the minted `-rw` key, scoped
 to ONE namePrefix (`jobs/` on a jobs box), and the third grant is scoped to
 `checkpoints/`. `_b2x_selftest/` is under neither, and the read key
